@@ -25,10 +25,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.record.TimestampType;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.SchemaProjector;
-import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
@@ -495,6 +492,29 @@ public class DataWriterAvroTest extends TestWithMockedS3 {
 
     long[] validOffsets = {0, 1, 3, 5, 7};
     verify(sinkRecords, validOffsets);
+  }
+
+  @Test
+  public void testUnionWrite() throws Exception {
+    localProps.put(io.confluent.connect.avro.AvroDataConfig.ENHANCED_AVRO_SCHEMA_SUPPORT_CONFIG, "true");
+    localProps.put(io.confluent.connect.avro.AvroDataConfig.CONNECT_META_DATA_CONFIG, "false");
+    setUp();
+    task = new S3SinkTask(connectorConfig, context, storage, partitioner, format, SYSTEM_TIME);
+
+    TestModel testModel = TestModel.newBuilder()
+        .setUserType(UserType.ANONYMOUS)
+        .build();
+
+    SchemaAndValue schemaAndValue = format.getAvroData().toConnectData(TestModel.SCHEMA$, testModel);
+    Schema schema = schemaAndValue.schema();
+    Object schemaValue = schemaAndValue.value();
+
+    SinkRecord sinkRecord = new SinkRecord(TOPIC, PARTITION, Schema.STRING_SCHEMA, "key", schema, schemaValue, 0);
+    List<SinkRecord> records = new ArrayList<>();
+    records.add(sinkRecord);
+    task.put(records);
+    task.close(context.assignment());
+    task.stop();
   }
 
   @Test
